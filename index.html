@@ -584,6 +584,10 @@
   <div class="logo">HIDEOUT<span>TERRAIN SCANNER v0.1</span></div>
   <div class="header-controls">
     <select class="region-select" id="regionSelect">
+      <optgroup label="New York">
+        <option value="adirondacks" selected>Adirondacks, NY</option>
+        <option value="catskills">Catskills, NY</option>
+      </optgroup>
       <optgroup label="Maine">
         <option value="maine_west">Western Maine Highlands</option>
         <option value="maine_north">Northern Maine Woods</option>
@@ -610,10 +614,6 @@
       </optgroup>
       <optgroup label="Rhode Island">
         <option value="ri_west">Western RI Woods</option>
-      </optgroup>
-      <optgroup label="New York">
-        <option value="adirondacks">Adirondacks, NY</option>
-        <option value="catskills">Catskills, NY</option>
       </optgroup>
     </select>
     <button class="scan-btn" id="scanBtn" onclick="runScan()">SCAN REGION</button>
@@ -720,7 +720,8 @@ map.on('click', () => {
   map.flyToBounds(currentRegion.bounds, { animate: true, duration: 1.2, padding: [40, 40] });
 });
 
-// Auto-scan on load so sites are immediately visible
+// Auto-scan on load so sites are immediately visible (skip flyToBounds)
+let isInitialScan = true;
 window.addEventListener('load', () => runScan());
 
 // ─── LOGGING ─────────────────────────────────────────────────────────────────
@@ -869,8 +870,11 @@ async function runScan() {
   currentRegion = region;
   activeCardIndex = null;
 
-  // Fly to region
-  map.flyToBounds(region.bounds, { duration: 1.2, padding: [40, 40] });
+  // Fly to region (skip on initial load to keep Saranac Lake view)
+  if (!isInitialScan) {
+    map.flyToBounds(region.bounds, { duration: 1.2, padding: [40, 40] });
+  }
+  isInitialScan = false;
 
   log(`Scanning ${region.name}...`);
 
