@@ -500,6 +500,90 @@
   }
   .legend-dot.mid { opacity: 0.6; }
   .legend-dot.low { opacity: 0.3; }
+
+  /* POI toggle panel */
+  .poi-panel {
+    position: absolute;
+    bottom: 24px;
+    right: 292px;
+    z-index: 500;
+    background: rgba(10,12,10,0.93);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    font-size: 9px;
+    color: var(--text-dim);
+    backdrop-filter: blur(8px);
+    min-width: 170px;
+    transition: right 0.3s ease;
+  }
+  .sidebar.collapsed ~ .poi-panel,
+  .poi-panel.sidebar-collapsed { right: 12px; }
+  .poi-panel-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .poi-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  .poi-toggle:hover { color: var(--text); }
+  .poi-toggle input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border: 1.5px solid var(--text-dim);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .poi-toggle input[type="checkbox"]:checked {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .poi-toggle input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 2px; top: 0;
+    width: 4px; height: 7px;
+    border: solid #000;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+  .poi-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .poi-label { letter-spacing: 1px; text-transform: uppercase; }
+  .poi-loading {
+    font-size: 8px;
+    color: var(--accent);
+    margin-left: auto;
+    animation: pulse 1.5s infinite;
+  }
+
+  /* POI map markers */
+  .poi-marker {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    line-height: 1;
+    border: 1.5px solid;
+    box-shadow: 0 0 6px rgba(0,0,0,0.5);
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -562,6 +646,15 @@
       <div class="legend-row"><div class="legend-dot mid"></div> MED (50–79)</div>
       <div class="legend-row"><div class="legend-dot low"></div> LOW (&lt;50)</div>
     </div>
+    <div class="poi-panel" id="poiPanel">
+      <div class="poi-panel-title">NEARBY SUPPLY</div>
+      <label class="poi-toggle" data-poi="guns"><input type="checkbox" onchange="togglePOI('guns')"><span class="poi-dot" style="background:#ff4444"></span><span class="poi-label">GUN SHOPS</span></label>
+      <label class="poi-toggle" data-poi="grocery"><input type="checkbox" onchange="togglePOI('grocery')"><span class="poi-dot" style="background:#44ff88"></span><span class="poi-label">GROCERY</span></label>
+      <label class="poi-toggle" data-poi="gas"><input type="checkbox" onchange="togglePOI('gas')"><span class="poi-dot" style="background:#ffaa22"></span><span class="poi-label">GAS STATIONS</span></label>
+      <label class="poi-toggle" data-poi="camping"><input type="checkbox" onchange="togglePOI('camping')"><span class="poi-dot" style="background:#22ccff"></span><span class="poi-label">CAMPING GEAR</span></label>
+      <label class="poi-toggle" data-poi="boats"><input type="checkbox" onchange="togglePOI('boats')"><span class="poi-dot" style="background:#8866ff"></span><span class="poi-label">BOAT RENTAL</span></label>
+      <label class="poi-toggle" data-poi="cars"><input type="checkbox" onchange="togglePOI('cars')"><span class="poi-dot" style="background:#ff66aa"></span><span class="poi-label">CAR RENTAL</span></label>
+    </div>
   </div>
 
   <div class="sidebar" id="sidebar">
@@ -616,7 +709,7 @@ const REGIONS = {
 };
 
 // ─── MAP INIT ────────────────────────────────────────────────────────────────
-const map = L.map('map', { zoomControl: false }).setView([44.05, -74.2], 10);
+const map = L.map('map', { zoomControl: false }).setView([44.33, -74.13], 11);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OSM contributors', maxZoom: 18
 }).addTo(map);
@@ -1024,6 +1117,118 @@ async function runFromHere() {
     btn.textContent = "RUN! 5-0 COMIN'";
   }
 }
+
+// ─── POI SYSTEM ─────────────────────────────────────────────────────────────
+const POI_CATEGORIES = {
+  guns:    { label: 'Gun Shops',     color: '#ff4444', icon: '🔫', query: '["shop"="weapons"]["shop"="hunting"]["shop"="guns"]["shop"="firearms"]' },
+  grocery: { label: 'Grocery',       color: '#44ff88', icon: '🛒', query: '["shop"="supermarket"]["shop"="grocery"]["shop"="convenience"]' },
+  gas:     { label: 'Gas Stations',  color: '#ffaa22', icon: '⛽', query: '["amenity"="fuel"]' },
+  camping: { label: 'Camping Gear',  color: '#22ccff', icon: '🏕', query: '["shop"="outdoor"]["shop"="sports"]' },
+  boats:   { label: 'Boat Rental',   color: '#8866ff', icon: '🚤', query: '["amenity"="boat_rental"]["shop"="boat"]["leisure"="marina"]' },
+  cars:    { label: 'Car Rental',    color: '#ff66aa', icon: '🚗', query: '["amenity"="car_rental"]' },
+};
+
+const poiLayers = {};    // key → L.layerGroup
+const poiCache = {};     // key → fetched data (per viewport hash)
+
+function getViewportBBox() {
+  const b = map.getBounds();
+  return `${b.getSouth().toFixed(3)},${b.getWest().toFixed(3)},${b.getNorth().toFixed(3)},${b.getEast().toFixed(3)}`;
+}
+
+async function fetchPOIs(category) {
+  const cat = POI_CATEGORIES[category];
+  const bbox = getViewportBBox();
+  // Build Overpass query — each tag filter is a separate node/way query
+  const tagFilters = cat.query.match(/\["[^"]+?"="[^"]+?"\]/g) || [];
+  const queries = tagFilters.map(f =>
+    `node${f}(${bbox});way${f}(${bbox});`
+  ).join('\n');
+
+  const overpass = `[out:json][timeout:15];(\n${queries}\n);out center;`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpass)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return (data.elements || []).map(el => ({
+    lat: el.lat ?? el.center?.lat,
+    lng: el.lon ?? el.center?.lon,
+    name: el.tags?.name || cat.label,
+    addr: el.tags?.['addr:street'] ? `${el.tags['addr:housenumber'] || ''} ${el.tags['addr:street']}`.trim() : '',
+  })).filter(p => p.lat && p.lng);
+}
+
+async function togglePOI(category) {
+  const toggle = document.querySelector(`.poi-toggle[data-poi="${category}"]`);
+  const checkbox = toggle.querySelector('input');
+
+  if (!checkbox.checked) {
+    // Remove layer
+    if (poiLayers[category]) {
+      map.removeLayer(poiLayers[category]);
+      delete poiLayers[category];
+    }
+    return;
+  }
+
+  // Show loading indicator
+  let loader = toggle.querySelector('.poi-loading');
+  if (!loader) {
+    loader = document.createElement('span');
+    loader.className = 'poi-loading';
+    loader.textContent = '...';
+    toggle.appendChild(loader);
+  }
+
+  try {
+    const pois = await fetchPOIs(category);
+    const cat = POI_CATEGORIES[category];
+    const layer = L.layerGroup();
+
+    pois.forEach(poi => {
+      const icon = L.divIcon({
+        html: `<div class="poi-marker" style="background:${cat.color}22;border-color:${cat.color};color:${cat.color}">${cat.icon}</div>`,
+        className: '',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+      const marker = L.marker([poi.lat, poi.lng], { icon }).addTo(layer);
+      marker.bindPopup(`
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:${cat.color};background:#0a0c0a;padding:8px;border:1px solid #1e2a1e">
+          <strong>${poi.name}</strong><br>
+          <span style="color:#5a6e5a">${cat.label}</span>
+          ${poi.addr ? `<br><span style="color:#5a6e5a">${poi.addr}</span>` : ''}
+        </div>
+      `, { className: 'dark-popup' });
+    });
+
+    // Remove old layer if exists, add new
+    if (poiLayers[category]) map.removeLayer(poiLayers[category]);
+    poiLayers[category] = layer;
+    layer.addTo(map);
+
+    log(`Loaded ${pois.length} ${cat.label.toLowerCase()}`, 'ok');
+  } catch (e) {
+    log(`Failed to load ${POI_CATEGORIES[category].label}`, 'warn');
+    checkbox.checked = false;
+  } finally {
+    if (loader) loader.remove();
+  }
+}
+
+// Keep POI panel position in sync with sidebar collapse
+const sidebarEl = document.getElementById('sidebar');
+const poiPanelEl = document.getElementById('poiPanel');
+new MutationObserver(() => {
+  poiPanelEl.classList.toggle('sidebar-collapsed', sidebarEl.classList.contains('collapsed'));
+}).observe(sidebarEl, { attributes: true, attributeFilter: ['class'] });
+
+// Refresh active POI layers when map moves significantly
+map.on('moveend', () => {
+  Object.keys(poiLayers).forEach(cat => {
+    const checkbox = document.querySelector(`.poi-toggle[data-poi="${cat}"] input`);
+    if (checkbox?.checked) togglePOI(cat).then(() => { checkbox.checked = true; });
+  });
+});
 </script>
 </body>
 </html>
