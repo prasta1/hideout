@@ -977,7 +977,7 @@ function renderResults(sites) {
     card.addEventListener('click', () => {
       document.querySelectorAll('.result-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');
-      map.flyTo([site.pt.lat, site.pt.lng], 14, { animate: true, duration: 1.0 });
+      map.flyTo([site.pt.lat, site.pt.lng], 12, { animate: true, duration: 1.0 });
       activeCardIndex = i;
     });
     list.appendChild(card);
@@ -1009,7 +1009,7 @@ function renderResults(sites) {
 
     // Clicking a marker zooms in and highlights its sidebar card
     marker.on('click', () => {
-      map.flyTo([site.pt.lat, site.pt.lng], 14, { animate: true, duration: 1.0 });
+      map.flyTo([site.pt.lat, site.pt.lng], 12, { animate: true, duration: 1.0 });
       document.querySelectorAll('.result-card').forEach(c => c.classList.remove('active'));
       const cards = document.querySelectorAll('.result-card');
       if (cards[i]) {
@@ -1095,7 +1095,7 @@ async function runFromHere() {
       const distKm = (closestDist * 111).toFixed(1); // rough deg-to-km
 
       // Zoom to it and highlight
-      map.flyTo([best.pt.lat, best.pt.lng], 14, { animate: true, duration: 1.2 });
+      map.flyTo([best.pt.lat, best.pt.lng], 12, { animate: true, duration: 1.2 });
       const cards = document.querySelectorAll('.result-card');
       if (cards[closestIdx]) {
         cards[closestIdx].classList.add('active');
