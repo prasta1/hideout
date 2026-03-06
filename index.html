@@ -879,7 +879,8 @@ async function runScan() {
   log(`Scanning ${region.name}...`);
 
   // 1. Forest coverage
-  sub.textContent = 'FETCHING FOREST DATA...';
+  const scanPhrases = ['SCOURING CRIMINAL DATABASES...', 'ASSESSING HIDEY-HOLES...', 'IDENTIFYING STASH SPOTS...'];
+  sub.textContent = scanPhrases[Math.floor(Math.random() * scanPhrases.length)];
   log('Querying Overpass API for forest/wood coverage...');
   let forestElements = [];
   try {
