@@ -723,6 +723,7 @@ map.on('click', () => {
 // Auto-scan on load so sites are immediately visible (skip flyToBounds)
 let isInitialScan = true;
 window.addEventListener('load', () => runScan());
+document.getElementById('regionSelect').addEventListener('change', () => runScan());
 
 // ─── LOGGING ─────────────────────────────────────────────────────────────────
 function log(msg, type = '') {
