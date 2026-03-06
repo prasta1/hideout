@@ -962,8 +962,8 @@ async function runFromHere() {
     let bestRegionKey = null;
     let bestDist = Infinity;
     for (const [key, r] of Object.entries(REGIONS)) {
-      const cLat = (r.bbox[0] + r.bbox[2]) / 2;
-      const cLng = (r.bbox[1] + r.bbox[3]) / 2;
+      const cLat = (r.bounds[0][0] + r.bounds[1][0]) / 2;
+      const cLng = (r.bounds[0][1] + r.bounds[1][1]) / 2;
       const d = Math.hypot(userLat - cLat, userLng - cLng);
       if (d < bestDist) { bestDist = d; bestRegionKey = key; }
     }
