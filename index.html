@@ -413,17 +413,14 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    border: 2px solid var(--accent);
-    background: rgba(74,255,110,0.2);
+    border: 2px solid;
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: 'Bebas Neue', sans-serif;
     font-size: 12px;
-    color: var(--accent);
     cursor: pointer;
     transition: transform 0.15s;
-    box-shadow: 0 0 12px rgba(74,255,110,0.3);
   }
 
   .scan-overlay {
@@ -723,7 +720,8 @@ map.on('click', () => {
   map.flyToBounds(currentRegion.bounds, { animate: true, duration: 1.2, padding: [40, 40] });
 });
 
-// No auto-scan — map starts centered on Saranac Lake, NY
+// Auto-scan on load so sites are immediately visible
+window.addEventListener('load', () => runScan());
 
 // ─── LOGGING ─────────────────────────────────────────────────────────────────
 function log(msg, type = '') {
@@ -989,10 +987,14 @@ function renderResults(sites) {
       });
     }, 50 + i * 60);
 
-    // Map marker
-    const opacity = site.score > 70 ? 1 : site.score > 50 ? 0.65 : 0.35;
+    // Map marker — score-based green: vivid for high, muted for low
+    const t = Math.max(0, Math.min(1, (site.score - 30) / 60)); // normalize 30-90 → 0-1
+    const g = Math.round(120 + t * 135);  // green channel: 120 (muted) → 255 (vivid)
+    const r = Math.round(40 + (1 - t) * 50); // red: slight warmth for low scores
+    const b = Math.round(40 + (1 - t) * 30);
+    const markerColor = `rgb(${r},${g},${b})`;
     const icon = L.divIcon({
-      html: `<div class="hideout-marker" style="opacity:${opacity}">${i+1}</div>`,
+      html: `<div class="hideout-marker" style="border-color:${markerColor};color:${markerColor};background:rgba(${r},${g},${b},0.2);box-shadow:0 0 12px rgba(${r},${g},${b},0.3)">${i+1}</div>`,
       className: '',
       iconSize: [28, 28],
       iconAnchor: [14, 14],
