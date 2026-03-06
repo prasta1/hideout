@@ -709,14 +709,34 @@ function isInForest(point, forestElements) {
   return false;
 }
 
+// Sample forest coverage as a 0-1 gradient instead of binary
+function forestDensity(point, forestElements) {
+  if (forestElements.length === 0) return 0;
+  // Check center + 8 sample points in a ~150m radius
+  const offsets = [
+    [0,0],[0.0015,0],[-0.0015,0],[0,0.0015],[0,-0.0015],
+    [0.001,0.001],[-0.001,0.001],[0.001,-0.001],[-0.001,-0.001]
+  ];
+  let hits = 0;
+  for (const [dlat, dlng] of offsets) {
+    if (isInForest({ lat: point.lat + dlat, lng: point.lng + dlng }, forestElements)) hits++;
+  }
+  return hits / offsets.length;
+}
+
 // ─── CONCAVITY SCORE ─────────────────────────────────────────────────────────
 // For each candidate, fetch its elevation and neighbors.
 // A hollow is lower than most of its neighbors → high concavity.
 function concavityScore(centerElev, neighborElevs) {
   const avg = neighborElevs.reduce((a, b) => a + b, 0) / neighborElevs.length;
   const diff = avg - centerElev; // positive = center is lower (hollow)
-  // Normalize: 20m difference = max score. Clip to [0,1].
-  return Math.min(Math.max(diff / 20, 0), 1);
+  // Count how many neighbors are higher (directional enclosure)
+  const higherCount = neighborElevs.filter(e => e > centerElev).length;
+  const enclosureRatio = higherCount / neighborElevs.length; // 0-1
+  // Depth component: 8m diff = half, 25m = max. Smooth curve.
+  const depthScore = Math.min(Math.max(diff / 25, 0), 1);
+  // Blend depth (60%) with directional enclosure (40%) for varied output
+  return depthScore * 0.6 + enclosureRatio * 0.4;
 }
 
 // ─── GENERATE CANDIDATE GRID ─────────────────────────────────────────────────
@@ -812,9 +832,9 @@ async function runScan() {
     const centerElev = elevations[base] ?? 300;
     const neighbors = elevations.slice(base + 1, base + 9);
     const concavity = concavityScore(centerElev, neighbors.length ? neighbors : [centerElev + 5]);
-    const forest = isInForest(pt, forestElements) ? 1 : 0;
+    const forest = forestDensity(pt, forestElements);
 
-    // Simulate slope variance from neighbor spread (rough ruggedness proxy)
+    // Ruggedness from neighbor elevation spread
     const spread = neighbors.length
       ? Math.max(...neighbors) - Math.min(...neighbors)
       : 0;
