@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HIDEOUT — Northeast Terrain Scanner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap');
+
+  :root {
+    --bg: #0a0c0a;
+    --surface: #111411;
+    --border: #1e2a1e;
+    --accent: #4aff6e;
+    --accent-dim: #1a5c2a;
+    --warn: #ff6b35;
+    --text: #c8d4c8;
+    --text-dim: #5a6e5a;
+    --grid: rgba(74,255,110,0.04);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* grid texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: rgba(10,12,10,0.95);
+    backdrop-filter: blur(10px);
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    color: var(--accent);
+    letter-spacing: 4px;
+    line-height: 1;
+  }
+
+  .logo span {
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 2px;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .header-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex: 1;
+  }
+
+  .region-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 8px 12px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .region-select:hover { border-color: var(--accent-dim); }
+
+  .scan-btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 2px;
+    padding: 8px 20px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .scan-btn:hover { opacity: 0.85; }
+  .scan-btn:active { transform: scale(0.98); }
+  .scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status-bar {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+    line-height: 1.6;
+  }
+
+  .status-bar .live {
+    color: var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+
+  #map {
+    flex: 1;
+    background: #0d110d;
+  }
+
+  /* Dark map tiles via CSS filter */
+  .leaflet-tile { filter: brightness(0.5) saturate(0.3) hue-rotate(90deg); }
+
+  .sidebar {
+    width: 280px;
+    background: rgba(10,12,10,0.97);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.3s ease;
+    position: relative;
+  }
+
+  .sidebar.collapsed {
+    width: 0;
+    border-left: none;
+  }
+
+  .sidebar-toggle {
+    position: absolute;
+    left: -32px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1000;
+    width: 32px;
+    height: 48px;
+    background: rgba(10,12,10,0.97);
+    border: 1px solid var(--border);
+    border-right: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s;
+    user-select: none;
+  }
+
+  .sidebar-toggle:hover {
+    background: var(--accent-dim);
+    color: #fff;
+  }
+
+  .sidebar-toggle svg {
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar.collapsed .sidebar-toggle svg {
+    transform: rotate(180deg);
+  }
+
+  .sidebar-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .results-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .results-list::-webkit-scrollbar { width: 4px; }
+  .results-list::-webkit-scrollbar-track { background: transparent; }
+  .results-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .result-card {
+    border: 1px solid var(--border);
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    transform: scaleY(0);
+    transition: transform 0.2s;
+    transform-origin: bottom;
+  }
+
+  .result-card:hover {
+    border-color: var(--accent-dim);
+    background: rgba(74,255,110,0.03);
+  }
+
+  .result-card:hover::before { transform: scaleY(1); }
+
+  .result-card.active {
+    border-color: var(--accent);
+    background: rgba(74,255,110,0.06);
+  }
+  .result-card.active::before { transform: scaleY(1); }
+
+  .card-rank {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    color: var(--accent-dim);
+    line-height: 1;
+    float: right;
+  }
+
+  .card-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .card-score {
+    font-size: 20px;
+    color: var(--accent);
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 1px;
+  }
+
+  .card-score span {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .card-coords {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  .score-bar-wrap {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .score-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+  }
+
+  .score-label { color: var(--text-dim); width: 64px; flex-shrink: 0; }
+
+  .score-bar {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .score-bar-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: var(--accent);
+    transition: width 0.6s ease;
+  }
+
+  .score-val { color: var(--text); width: 24px; text-align: right; }
+
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 2;
+  }
+
+  .empty-state .big {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    color: var(--border);
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .log-panel {
+    border-top: 1px solid var(--border);
+    padding: 10px 14px;
+    font-size: 9px;
+    color: var(--text-dim);
+    line-height: 1.8;
+    max-height: 120px;
+    overflow-y: auto;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .log-line { display: flex; gap: 8px; }
+  .log-time { color: var(--accent-dim); flex-shrink: 0; }
+  .log-msg { color: var(--text-dim); }
+  .log-msg.ok { color: var(--accent); }
+  .log-msg.warn { color: var(--warn); }
+
+  /* Map markers */
+  .hideout-marker {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: rgba(74,255,110,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 12px;
+    color: var(--accent);
+    cursor: pointer;
+    transition: transform 0.15s;
+    box-shadow: 0 0 12px rgba(74,255,110,0.3);
+  }
+
+  .scan-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,12,10,0.7);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .scan-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .scan-ring {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .scan-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 4px;
+    color: var(--accent);
+  }
+
+  .scan-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+  }
+
+  .legend {
+    position: absolute;
+    bottom: 24px;
+    left: 12px;
+    z-index: 500;
+    background: rgba(10,12,10,0.9);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    font-size: 9px;
+    color: var(--text-dim);
+    line-height: 2;
+    backdrop-filter: blur(8px);
+  }
+
+  .legend-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .legend-row { display: flex; gap: 8px; align-items: center; }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 1.5px solid var(--accent);
+    background: rgba(74,255,110,0.2);
+  }
+  .legend-dot.mid { opacity: 0.6; }
+  .legend-dot.low { opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">HIDEOUT<span>TERRAIN SCANNER v0.1</span></div>
+  <div class="header-controls">
+    <select class="region-select" id="regionSelect">
+      <option value="adirondacks">Adirondacks, NY</option>
+      <option value="catskills">Catskills, NY</option>
+      <option value="vermont">Green Mountains, VT</option>
+      <option value="maine">Western Maine Highlands</option>
+      <option value="berkshires">Berkshires, MA</option>
+    </select>
+    <button class="scan-btn" id="scanBtn" onclick="runScan()">SCAN REGION</button>
+  </div>
+  <div class="status-bar" id="statusBar">
+    SELECT REGION<br>
+    <span style="color:var(--text-dim)">READY</span>
+  </div>
+</header>
+
+<div class="main">
+  <div id="map">
+    <div class="scan-overlay" id="scanOverlay">
+      <div class="scan-ring"></div>
+      <div class="scan-label">SCANNING</div>
+      <div class="scan-sub" id="scanSubLabel">FETCHING TERRAIN DATA...</div>
+    </div>
+    <div class="legend">
+      <div class="legend-title">ENCLOSURE SCORE</div>
+      <div class="legend-row"><div class="legend-dot"></div> HIGH (80–100)</div>
+      <div class="legend-row"><div class="legend-dot mid"></div> MED (50–79)</div>
+      <div class="legend-row"><div class="legend-dot low"></div> LOW (&lt;50)</div>
+    </div>
+  </div>
+
+  <div class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle panel">
+      <svg width="10" height="14" viewBox="0 0 10 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="7,1 2,7 7,13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div class="sidebar-header">CANDIDATE SITES — <span id="siteCount">0</span> FOUND</div>
+    <div class="results-list" id="resultsList">
+      <div class="empty-state">
+        <span class="big">DARK</span>
+        No scan data.<br>Select a region and run scan.
+      </div>
+    </div>
+    <div class="log-panel" id="logPanel"></div>
+  </div>
+</div>
+
+<script>
+// ─── REGION BOUNDING BOXES ──────────────────────────────────────────────────
+const REGIONS = {
+  adirondacks: { name: 'Adirondacks, NY', bounds: [[43.5, -74.8], [44.6, -73.6]], center: [44.05, -74.2], zoom: 10 },
+  catskills:   { name: 'Catskills, NY',   bounds: [[41.8, -74.7], [42.4, -73.9]], center: [42.1,  -74.3], zoom: 10 },
+  vermont:     { name: 'Green Mountains, VT', bounds: [[43.5, -73.2], [44.5, -72.4]], center: [44.0, -72.8], zoom: 10 },
+  maine:       { name: 'Western Maine Highlands', bounds: [[44.8, -70.8], [45.8, -69.8]], center: [45.3, -70.3], zoom: 10 },
+  berkshires:  { name: 'Berkshires, MA',  bounds: [[42.1, -73.4], [42.7, -72.9]], center: [42.4, -73.15], zoom: 11 },
+};
+
+// ─── MAP INIT ────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false }).setView([44.05, -74.2], 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OSM contributors', maxZoom: 18
+}).addTo(map);
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+let markerLayer = L.layerGroup().addTo(map);
+let activeCardIndex = null;
+let currentRegion = null;
+
+// Clicking the map background zooms back out to region overview
+map.on('click', () => {
+  if (activeCardIndex === null || !currentRegion) return;
+  activeCardIndex = null;
+  document.querySelectorAll('.result-card').forEach(c => c.classList.remove('active'));
+  map.flyToBounds(currentRegion.bounds, { animate: true, duration: 1.2, padding: [40, 40] });
+});
+
+// Auto-scan on load
+window.addEventListener('load', () => runScan());
+
+// ─── LOGGING ─────────────────────────────────────────────────────────────────
+function log(msg, type = '') {
+  const panel = document.getElementById('logPanel');
+  const now = new Date();
+  const t = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${type}">${msg}</span>`;
+  panel.appendChild(line);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+// ─── ELEVATION FETCH via OpenTopoData (SRTM 30m) ─────────────────────────────
+async function fetchElevations(points) {
+  // OpenTopoData accepts up to 100 points per request
+  const chunks = [];
+  for (let i = 0; i < points.length; i += 100) chunks.push(points.slice(i, i + 100));
+
+  const results = [];
+  for (const chunk of chunks) {
+    const locations = chunk.map(p => `${p.lat},${p.lng}`).join('|');
+    const url = `https://api.opentopodata.org/v1/srtm30m?locations=${locations}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.results) results.push(...data.results.map(r => r.elevation ?? 0));
+    await new Promise(r => setTimeout(r, 300)); // rate limit courtesy
+  }
+  return results;
+}
+
+// ─── LAND COVER FETCH via Overpass (forest/wood areas) ───────────────────────
+async function fetchForestCoverage(region) {
+  const [sw, ne] = region.bounds;
+  const bbox = `${sw[0]},${sw[1]},${ne[0]},${ne[1]}`;
+  const query = `[out:json][timeout:25];
+    (
+      way["landuse"="forest"](${bbox});
+      way["natural"="wood"](${bbox});
+      relation["landuse"="forest"](${bbox});
+    );
+    out geom;`;
+
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data.elements || [];
+}
+
+// ─── POINT-IN-POLYGON (ray casting) ─────────────────────────────────────────
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  const { lat, lng } = point;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lon, yi = polygon[i].lat;
+    const xj = polygon[j].lon, yj = polygon[j].lat;
+    const intersect = ((yi > lat) !== (yj > lat)) &&
+      (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function isInForest(point, forestElements) {
+  for (const el of forestElements) {
+    if (el.type === 'way' && el.geometry) {
+      if (pointInPolygon(point, el.geometry)) return true;
+    }
+  }
+  return false;
+}
+
+// ─── CONCAVITY SCORE ─────────────────────────────────────────────────────────
+// For each candidate, fetch its elevation and neighbors.
+// A hollow is lower than most of its neighbors → high concavity.
+function concavityScore(centerElev, neighborElevs) {
+  const avg = neighborElevs.reduce((a, b) => a + b, 0) / neighborElevs.length;
+  const diff = avg - centerElev; // positive = center is lower (hollow)
+  // Normalize: 20m difference = max score. Clip to [0,1].
+  return Math.min(Math.max(diff / 20, 0), 1);
+}
+
+// ─── GENERATE CANDIDATE GRID ─────────────────────────────────────────────────
+function generateCandidates(region, count = 36) {
+  const [sw, ne] = region.bounds;
+  const latRange = ne[0] - sw[0];
+  const lngRange = ne[1] - sw[1];
+  const candidates = [];
+  // stratified random sampling across the region
+  const cols = Math.ceil(Math.sqrt(count * (lngRange / latRange)));
+  const rows = Math.ceil(count / cols);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (candidates.length >= count) break;
+      const lat = sw[0] + (r + 0.3 + Math.random() * 0.4) * (latRange / rows);
+      const lng = sw[1] + (c + 0.3 + Math.random() * 0.4) * (lngRange / cols);
+      candidates.push({ lat, lng });
+    }
+  }
+  return candidates.slice(0, count);
+}
+
+// For each candidate, generate 8 neighbor points at ~300m offset
+function neighborPoints(pt, offsetDeg = 0.003) {
+  const dirs = [
+    [1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]
+  ];
+  return dirs.map(([dlat, dlng]) => ({ lat: pt.lat + dlat * offsetDeg, lng: pt.lng + dlng * offsetDeg }));
+}
+
+// ─── MAIN SCAN ───────────────────────────────────────────────────────────────
+async function runScan() {
+  const regionKey = document.getElementById('regionSelect').value;
+  const region = REGIONS[regionKey];
+  const btn = document.getElementById('scanBtn');
+  const overlay = document.getElementById('scanOverlay');
+  const sub = document.getElementById('scanSubLabel');
+
+  btn.disabled = true;
+  overlay.classList.add('active');
+  markerLayer.clearLayers();
+  document.getElementById('resultsList').innerHTML = '';
+  document.getElementById('siteCount').textContent = '0';
+  document.getElementById('logPanel').innerHTML = '';
+  currentRegion = region;
+  activeCardIndex = null;
+
+  // Fly to region
+  map.flyToBounds(region.bounds, { duration: 1.2, padding: [40, 40] });
+
+  log(`Scanning ${region.name}...`);
+
+  // 1. Forest coverage
+  sub.textContent = 'FETCHING FOREST DATA...';
+  log('Querying Overpass API for forest/wood coverage...');
+  let forestElements = [];
+  try {
+    forestElements = await fetchForestCoverage(region);
+    log(`Found ${forestElements.length} forest polygons`, 'ok');
+  } catch (e) {
+    log('Overpass fetch failed, using terrain-only scoring', 'warn');
+  }
+
+  // 2. Generate candidates
+  sub.textContent = 'GENERATING CANDIDATE GRID...';
+  const candidates = generateCandidates(region, 30);
+  log(`Generated ${candidates.length} candidate points`);
+
+  // 3. Fetch elevations (center + 8 neighbors each)
+  sub.textContent = 'FETCHING ELEVATION DATA...';
+  log('Requesting SRTM elevation data from OpenTopoData...');
+  const allPoints = [];
+  candidates.forEach(pt => {
+    allPoints.push(pt);
+    allPoints.push(...neighborPoints(pt));
+  });
+
+  let elevations = [];
+  try {
+    elevations = await fetchElevations(allPoints);
+    log(`Received ${elevations.length} elevation readings`, 'ok');
+  } catch (e) {
+    log('Elevation fetch failed, using random terrain simulation', 'warn');
+    elevations = allPoints.map(() => 300 + Math.random() * 400);
+  }
+
+  // 4. Score each candidate
+  sub.textContent = 'SCORING CANDIDATES...';
+  log('Computing enclosure scores...');
+
+  const scored = candidates.map((pt, i) => {
+    const base = i * 9;
+    const centerElev = elevations[base] ?? 300;
+    const neighbors = elevations.slice(base + 1, base + 9);
+    const concavity = concavityScore(centerElev, neighbors.length ? neighbors : [centerElev + 5]);
+    const forest = isInForest(pt, forestElements) ? 1 : 0;
+
+    // Simulate slope variance from neighbor spread (rough ruggedness proxy)
+    const spread = neighbors.length
+      ? Math.max(...neighbors) - Math.min(...neighbors)
+      : 0;
+    const ruggedness = Math.min(spread / 40, 1); // 40m spread = max
+
+    // Weighted composite
+    const score = Math.round((concavity * 0.45 + forest * 0.35 + ruggedness * 0.20) * 100);
+
+    return { pt, score, concavity, forest, ruggedness, elevation: centerElev };
+  });
+
+  // Sort by score desc, take top 10
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, 10);
+
+  log(`Top candidate score: ${top[0]?.score ?? '--'}/100`, 'ok');
+
+  // 5. Render results
+  overlay.classList.remove('active');
+  btn.disabled = false;
+  document.getElementById('siteCount').textContent = top.length;
+  document.getElementById('statusBar').innerHTML = `${region.name}<br><span class="live">● SCAN COMPLETE</span>`;
+
+  renderResults(top);
+}
+
+// ─── RENDER RESULTS ──────────────────────────────────────────────────────────
+function renderResults(sites) {
+  const list = document.getElementById('resultsList');
+  list.innerHTML = '';
+  markerLayer.clearLayers();
+
+  sites.forEach((site, i) => {
+    // Sidebar card
+    const card = document.createElement('div');
+    card.className = 'result-card';
+    card.innerHTML = `
+      <div class="card-rank">${String(i+1).padStart(2,'0')}</div>
+      <div class="card-label">ENCLOSURE SITE</div>
+      <div class="card-score">${site.score}<span>/100</span></div>
+      <div class="card-coords">${site.pt.lat.toFixed(4)}°N  ${Math.abs(site.pt.lng).toFixed(4)}°W  ·  ${Math.round(site.elevation)}m</div>
+      <div class="score-bar-wrap">
+        ${scoreRow('CONCAVITY', Math.round(site.concavity*100))}
+        ${scoreRow('CANOPY', Math.round(site.forest*100))}
+        ${scoreRow('RUGGEDNESS', Math.round(site.ruggedness*100))}
+      </div>
+    `;
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.result-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      map.flyTo([site.pt.lat, site.pt.lng], 14, { animate: true, duration: 1.0 });
+      activeCardIndex = i;
+    });
+    list.appendChild(card);
+
+    // Animate bars after append
+    setTimeout(() => {
+      card.querySelectorAll('.score-bar-fill').forEach(bar => {
+        bar.style.width = bar.dataset.width;
+      });
+    }, 50 + i * 60);
+
+    // Map marker
+    const opacity = site.score > 70 ? 1 : site.score > 50 ? 0.65 : 0.35;
+    const icon = L.divIcon({
+      html: `<div class="hideout-marker" style="opacity:${opacity}">${i+1}</div>`,
+      className: '',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    const marker = L.marker([site.pt.lat, site.pt.lng], { icon }).addTo(markerLayer);
+    marker.bindPopup(`
+      <div style="font-family:'Space Mono',monospace;font-size:10px;color:#4aff6e;background:#0a0c0a;padding:8px;border:1px solid #1e2a1e">
+        <strong>SITE #${i+1}</strong><br>
+        Score: ${site.score}/100<br>
+        Elev: ${Math.round(site.elevation)}m<br>
+        ${site.pt.lat.toFixed(5)}, ${site.pt.lng.toFixed(5)}
+      </div>
+    `, { className: 'dark-popup' });
+
+    // Clicking a marker zooms in and highlights its sidebar card
+    marker.on('click', () => {
+      map.flyTo([site.pt.lat, site.pt.lng], 14, { animate: true, duration: 1.0 });
+      document.querySelectorAll('.result-card').forEach(c => c.classList.remove('active'));
+      const cards = document.querySelectorAll('.result-card');
+      if (cards[i]) {
+        cards[i].classList.add('active');
+        cards[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      activeCardIndex = i;
+    });
+  });
+}
+
+// ─── SIDEBAR TOGGLE ──────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('collapsed');
+  setTimeout(() => map.invalidateSize(), 310);
+}
+
+function scoreRow(label, val) {
+  return `
+    <div class="score-row">
+      <span class="score-label">${label}</span>
+      <div class="score-bar"><div class="score-bar-fill" style="width:0%" data-width="${val}%"></div></div>
+      <span class="score-val">${val}</span>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>
