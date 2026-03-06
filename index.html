@@ -573,14 +573,9 @@
 
   /* POI map markers */
   .poi-marker {
-    width: 20px; height: 20px;
+    width: 12px; height: 12px;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    line-height: 1;
-    border: 1.5px solid;
+    border: 2px solid;
     box-shadow: 0 0 6px rgba(0,0,0,0.5);
     cursor: pointer;
   }
@@ -728,8 +723,7 @@ map.on('click', () => {
   map.flyToBounds(currentRegion.bounds, { animate: true, duration: 1.2, padding: [40, 40] });
 });
 
-// Auto-scan on load
-window.addEventListener('load', () => runScan());
+// No auto-scan — map starts centered on Saranac Lake, NY
 
 // ─── LOGGING ─────────────────────────────────────────────────────────────────
 function log(msg, type = '') {
@@ -1186,10 +1180,10 @@ async function togglePOI(category) {
 
     pois.forEach(poi => {
       const icon = L.divIcon({
-        html: `<div class="poi-marker" style="background:${cat.color}22;border-color:${cat.color};color:${cat.color}">${cat.icon}</div>`,
+        html: `<div class="poi-marker" style="background:${cat.color};border-color:${cat.color}"></div>`,
         className: '',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
       });
       const marker = L.marker([poi.lat, poi.lng], { icon }).addTo(layer);
       marker.bindPopup(`
