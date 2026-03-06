@@ -110,6 +110,22 @@
   .scan-btn:active { transform: scale(0.98); }
   .scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  .run-btn {
+    background: var(--warn);
+    color: #000;
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 2px;
+    padding: 8px 20px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .run-btn:hover { opacity: 0.85; }
+  .run-btn:active { transform: scale(0.98); }
+  .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .status-bar {
     margin-left: auto;
     font-size: 10px;
@@ -201,6 +217,50 @@
     letter-spacing: 2px;
     color: var(--text-dim);
     text-transform: uppercase;
+  }
+
+  .filter-row {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .filter-row label { flex-shrink: 0; text-transform: uppercase; }
+
+  .filter-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+  .filter-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  .filter-slider::-moz-range-thumb {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+  }
+  .filter-val {
+    width: 28px;
+    text-align: right;
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
   }
 
   .results-list {
@@ -448,13 +508,40 @@
   <div class="logo">HIDEOUT<span>TERRAIN SCANNER v0.1</span></div>
   <div class="header-controls">
     <select class="region-select" id="regionSelect">
-      <option value="adirondacks">Adirondacks, NY</option>
-      <option value="catskills">Catskills, NY</option>
-      <option value="vermont">Green Mountains, VT</option>
-      <option value="maine">Western Maine Highlands</option>
-      <option value="berkshires">Berkshires, MA</option>
+      <optgroup label="Maine">
+        <option value="maine_west">Western Maine Highlands</option>
+        <option value="maine_north">Northern Maine Woods</option>
+        <option value="maine_downeast">Downeast & Acadia</option>
+        <option value="maine_midcoast">Midcoast Hills</option>
+      </optgroup>
+      <optgroup label="New Hampshire">
+        <option value="nh_whites">White Mountains, NH</option>
+        <option value="nh_monadnock">Monadnock Region, NH</option>
+        <option value="nh_lakes">Lakes Region, NH</option>
+      </optgroup>
+      <optgroup label="Vermont">
+        <option value="vt_green">Green Mountains, VT</option>
+        <option value="vt_northeast">Northeast Kingdom, VT</option>
+      </optgroup>
+      <optgroup label="Massachusetts">
+        <option value="ma_berkshires">Berkshires, MA</option>
+        <option value="ma_centralhi">Central Highlands, MA</option>
+        <option value="ma_bluehills">Blue Hills & SE, MA</option>
+      </optgroup>
+      <optgroup label="Connecticut">
+        <option value="ct_litchfield">Litchfield Hills, CT</option>
+        <option value="ct_valley">CT River Valley, CT</option>
+      </optgroup>
+      <optgroup label="Rhode Island">
+        <option value="ri_west">Western RI Woods</option>
+      </optgroup>
+      <optgroup label="New York">
+        <option value="adirondacks">Adirondacks, NY</option>
+        <option value="catskills">Catskills, NY</option>
+      </optgroup>
     </select>
     <button class="scan-btn" id="scanBtn" onclick="runScan()">SCAN REGION</button>
+    <button class="run-btn" id="runBtn" onclick="runFromHere()">RUN! 5-0 COMIN'</button>
   </div>
   <div class="status-bar" id="statusBar">
     SELECT REGION<br>
@@ -484,6 +571,11 @@
       </svg>
     </button>
     <div class="sidebar-header">CANDIDATE SITES — <span id="siteCount">0</span> FOUND</div>
+    <div class="filter-row">
+      <label>MIN SCORE</label>
+      <input type="range" class="filter-slider" id="scoreFilter" min="0" max="100" value="0" oninput="applyFilter()">
+      <span class="filter-val" id="filterVal">0</span>
+    </div>
     <div class="results-list" id="resultsList">
       <div class="empty-state">
         <span class="big">DARK</span>
@@ -497,11 +589,30 @@
 <script>
 // ─── REGION BOUNDING BOXES ──────────────────────────────────────────────────
 const REGIONS = {
-  adirondacks: { name: 'Adirondacks, NY', bounds: [[43.5, -74.8], [44.6, -73.6]], center: [44.05, -74.2], zoom: 10 },
-  catskills:   { name: 'Catskills, NY',   bounds: [[41.8, -74.7], [42.4, -73.9]], center: [42.1,  -74.3], zoom: 10 },
-  vermont:     { name: 'Green Mountains, VT', bounds: [[43.5, -73.2], [44.5, -72.4]], center: [44.0, -72.8], zoom: 10 },
-  maine:       { name: 'Western Maine Highlands', bounds: [[44.8, -70.8], [45.8, -69.8]], center: [45.3, -70.3], zoom: 10 },
-  berkshires:  { name: 'Berkshires, MA',  bounds: [[42.1, -73.4], [42.7, -72.9]], center: [42.4, -73.15], zoom: 11 },
+  // Maine
+  maine_west:     { name: 'Western Maine Highlands',  bounds: [[44.8, -70.8], [45.8, -69.8]], center: [45.3, -70.3],  zoom: 10 },
+  maine_north:    { name: 'Northern Maine Woods',     bounds: [[46.0, -69.8], [47.2, -68.5]], center: [46.6, -69.15], zoom: 9  },
+  maine_downeast: { name: 'Downeast & Acadia, ME',    bounds: [[44.2, -68.5], [44.8, -67.5]], center: [44.5, -68.0],  zoom: 10 },
+  maine_midcoast: { name: 'Midcoast Hills, ME',       bounds: [[43.9, -69.8], [44.5, -69.0]], center: [44.2, -69.4],  zoom: 10 },
+  // New Hampshire
+  nh_whites:      { name: 'White Mountains, NH',      bounds: [[43.9, -71.8], [44.5, -71.0]], center: [44.2, -71.4],  zoom: 10 },
+  nh_monadnock:   { name: 'Monadnock Region, NH',     bounds: [[42.7, -72.3], [43.2, -71.7]], center: [42.95, -72.0], zoom: 11 },
+  nh_lakes:       { name: 'Lakes Region, NH',         bounds: [[43.4, -71.8], [43.9, -71.1]], center: [43.65, -71.45],zoom: 10 },
+  // Vermont
+  vt_green:       { name: 'Green Mountains, VT',      bounds: [[43.5, -73.2], [44.5, -72.4]], center: [44.0, -72.8],  zoom: 10 },
+  vt_northeast:   { name: 'Northeast Kingdom, VT',    bounds: [[44.5, -72.2], [45.0, -71.5]], center: [44.75, -71.85],zoom: 10 },
+  // Massachusetts
+  ma_berkshires:  { name: 'Berkshires, MA',            bounds: [[42.1, -73.4], [42.7, -72.9]], center: [42.4, -73.15], zoom: 11 },
+  ma_centralhi:   { name: 'Central Highlands, MA',    bounds: [[42.3, -72.3], [42.7, -71.8]], center: [42.5, -72.05], zoom: 11 },
+  ma_bluehills:   { name: 'Blue Hills & SE, MA',      bounds: [[42.0, -71.3], [42.3, -70.8]], center: [42.15, -71.05],zoom: 12 },
+  // Connecticut
+  ct_litchfield:  { name: 'Litchfield Hills, CT',     bounds: [[41.6, -73.4], [42.0, -72.8]], center: [41.8, -73.1],  zoom: 11 },
+  ct_valley:      { name: 'CT River Valley, CT',      bounds: [[41.3, -72.8], [41.8, -72.3]], center: [41.55, -72.55],zoom: 11 },
+  // Rhode Island
+  ri_west:        { name: 'Western RI Woods',         bounds: [[41.4, -71.9], [41.8, -71.5]], center: [41.6, -71.7],  zoom: 12 },
+  // New York
+  adirondacks:    { name: 'Adirondacks, NY',          bounds: [[43.5, -74.8], [44.6, -73.6]], center: [44.05, -74.2], zoom: 10 },
+  catskills:      { name: 'Catskills, NY',            bounds: [[41.8, -74.7], [42.4, -73.9]], center: [42.1, -74.3],  zoom: 10 },
 };
 
 // ─── MAP INIT ────────────────────────────────────────────────────────────────
@@ -514,6 +625,7 @@ L.control.zoom({ position: 'topright' }).addTo(map);
 let markerLayer = L.layerGroup().addTo(map);
 let activeCardIndex = null;
 let currentRegion = null;
+let lastScoredResults = []; // store full results for filtering
 
 // Clicking the map background zooms back out to region overview
 map.on('click', () => {
@@ -717,8 +829,13 @@ async function runScan() {
   // Sort by score desc, take top 10
   scored.sort((a, b) => b.score - a.score);
   const top = scored.slice(0, 10);
+  lastScoredResults = top;
 
   log(`Top candidate score: ${top[0]?.score ?? '--'}/100`, 'ok');
+
+  // Reset filter slider
+  document.getElementById('scoreFilter').value = 0;
+  document.getElementById('filterVal').textContent = '0';
 
   // 5. Render results
   overlay.classList.remove('active');
@@ -812,6 +929,80 @@ function scoreRow(label, val) {
       <span class="score-val">${val}</span>
     </div>
   `;
+}
+
+// ─── FILTER BY SCORE ─────────────────────────────────────────────────────────
+function applyFilter() {
+  const min = parseInt(document.getElementById('scoreFilter').value);
+  document.getElementById('filterVal').textContent = min;
+  const filtered = lastScoredResults.filter(s => s.score >= min);
+  document.getElementById('siteCount').textContent = filtered.length;
+  renderResults(filtered);
+}
+
+// ─── RUN! 5-0 COMIN' — GEOLOCATION NEAREST BEST SPOT ────────────────────────
+async function runFromHere() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = 'LOCATING...';
+  const statusBar = document.getElementById('statusBar');
+  statusBar.innerHTML = `GPS LOCATE<br><span class="live">● ACQUIRING</span>`;
+
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true, timeout: 15000
+      });
+    });
+
+    const userLat = pos.coords.latitude;
+    const userLng = pos.coords.longitude;
+
+    // Find closest region to user
+    let bestRegionKey = null;
+    let bestDist = Infinity;
+    for (const [key, r] of Object.entries(REGIONS)) {
+      const cLat = (r.bbox[0] + r.bbox[2]) / 2;
+      const cLng = (r.bbox[1] + r.bbox[3]) / 2;
+      const d = Math.hypot(userLat - cLat, userLng - cLng);
+      if (d < bestDist) { bestDist = d; bestRegionKey = key; }
+    }
+
+    // Set region and run scan
+    document.getElementById('regionSelect').value = bestRegionKey;
+    btn.textContent = 'SCANNING...';
+    statusBar.innerHTML = `${REGIONS[bestRegionKey].name}<br><span class="live">● SCANNING NEARBY</span>`;
+
+    await runScan();
+
+    // After scan, pick the closest top site to the user
+    if (lastScoredResults.length > 0) {
+      let closestIdx = 0;
+      let closestDist = Infinity;
+      lastScoredResults.forEach((site, i) => {
+        const d = Math.hypot(userLat - site.pt.lat, userLng - site.pt.lng);
+        if (d < closestDist) { closestDist = d; closestIdx = i; }
+      });
+
+      const best = lastScoredResults[closestIdx];
+      const distKm = (closestDist * 111).toFixed(1); // rough deg-to-km
+
+      // Zoom to it and highlight
+      map.flyTo([best.pt.lat, best.pt.lng], 14, { animate: true, duration: 1.2 });
+      const cards = document.querySelectorAll('.result-card');
+      if (cards[closestIdx]) {
+        cards[closestIdx].classList.add('active');
+        cards[closestIdx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      statusBar.innerHTML = `GO! ~${distKm} km away<br><span class="live">● SITE #${closestIdx + 1} — SCORE ${best.score}</span>`;
+    }
+  } catch (err) {
+    statusBar.innerHTML = `GPS FAILED<br><span style="color:var(--warn)">${err.message || 'Location denied'}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "RUN! 5-0 COMIN'";
+  }
 }
 </script>
 </body>
