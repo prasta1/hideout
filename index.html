@@ -762,7 +762,7 @@
 <body>
 
 <header>
-  <div class="logo">HIDEOUT<span>TERRAIN SCANNER v0.1</span></div>
+  <div class="logo">HIDEOUT<span>TERRAIN SCANNER v0.1 (a jason smith joint)</span></div>
   <div class="header-controls">
     <select class="region-select" id="regionSelect">
       <optgroup label="New York">
@@ -1158,7 +1158,7 @@ function renderResults(sites) {
     card.className = 'result-card';
     card.innerHTML = `
       <div class="card-rank">${String(i+1).padStart(2,'0')}</div>
-      <div class="card-label">ENCLOSURE SITE</div>
+      <div class="card-label">HIDING SPOT</div>
       <div class="card-score">${site.score}<span>/100</span></div>
       <div class="card-coords">${site.pt.lat.toFixed(4)}°N  ${Math.abs(site.pt.lng).toFixed(4)}°W  ·  ${Math.round(site.elevation)}m</div>
       <div class="score-bar-wrap">
