@@ -576,6 +576,187 @@
     box-shadow: 0 0 6px rgba(0,0,0,0.5);
     cursor: pointer;
   }
+
+  /* ─── Bottom sheet handle (hidden on desktop) ─── */
+  .sheet-handle {
+    display: none;
+  }
+
+  /* ─── FAB run button (hidden on desktop) ─── */
+  .fab-run {
+    display: none;
+  }
+
+  /* ─── MOBILE RESPONSIVE ─── */
+  @media (max-width: 640px) {
+    *, *::before, *::after { touch-action: manipulation; }
+
+    /* Header — stack vertically, compact */
+    header {
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      gap: 6px;
+    }
+    .logo {
+      font-size: 16px;
+      width: 100%;
+    }
+    .logo span { display: none; }
+    .header-controls {
+      width: 100%;
+      gap: 6px;
+    }
+    .region-select {
+      flex: 1;
+      min-height: 44px;
+      font-size: 13px;
+    }
+    .scan-btn {
+      min-height: 44px;
+      padding: 8px 14px;
+      font-size: 14px;
+    }
+    .run-btn { display: none; }
+    .status-bar {
+      width: 100%;
+      text-align: center;
+      font-size: 10px;
+      padding: 4px 0;
+    }
+
+    /* Map — full screen behind sheet */
+    .main {
+      flex-direction: column;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Sidebar → bottom sheet */
+    .sidebar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      width: 100% !important;
+      max-height: 70vh;
+      z-index: 1000;
+      border-top: 1px solid var(--border);
+      border-left: none;
+      transform: translateY(calc(100% - 48px));
+      transition: transform 0.3s ease;
+      border-radius: 12px 12px 0 0;
+      overflow: hidden;
+    }
+    .sidebar.sheet-peek {
+      transform: translateY(calc(100% - 220px));
+    }
+    .sidebar.sheet-open {
+      transform: translateY(0);
+      overflow-y: auto;
+    }
+    .sidebar.collapsed {
+      transform: translateY(calc(100% - 48px)) !important;
+    }
+    .sidebar-toggle { display: none; }
+
+    /* Sheet handle — visible on mobile */
+    .sheet-handle {
+      display: block;
+      width: 40px;
+      height: 4px;
+      background: var(--text-dim);
+      border-radius: 2px;
+      margin: 10px auto 6px;
+      cursor: grab;
+    }
+
+    /* Sidebar internals */
+    .sidebar-header {
+      font-size: 11px;
+      padding: 6px 12px;
+    }
+    .filter-row {
+      padding: 6px 12px;
+    }
+    .filter-slider {
+      height: 6px;
+      min-height: 44px;
+    }
+    .results-list {
+      padding: 6px;
+    }
+    .result-card {
+      padding: 10px 12px;
+      min-height: 44px;
+    }
+    .log-panel { display: none; }
+
+    /* FAB — visible on mobile */
+    .fab-run {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      bottom: 60px;
+      right: 16px;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: var(--warn);
+      color: #000;
+      border: none;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      z-index: 1001;
+      box-shadow: 0 4px 16px rgba(255,170,34,0.5);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .fab-run:active {
+      transform: scale(0.9);
+    }
+    .fab-run:disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* Legend — reposition above sheet */
+    .legend {
+      bottom: 58px;
+      left: 8px;
+      font-size: 8px;
+      padding: 6px 8px;
+    }
+    .legend-title { font-size: 8px; }
+
+    /* POI panel — reposition */
+    .poi-panel, .poi-panel.sidebar-collapsed {
+      right: 8px !important;
+      top: auto;
+      bottom: 58px;
+      max-height: 30vh;
+      font-size: 9px;
+    }
+    .poi-toggle {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+    }
+    .poi-label { font-size: 10px; }
+
+    /* Bigger map markers on mobile */
+    .leaflet-marker-icon:not(.poi-marker) {
+      width: 34px !important;
+      height: 34px !important;
+    }
+
+    /* Scan overlay text */
+    .scan-label { font-size: 18px; }
+    .scan-sub { font-size: 10px; }
+  }
 </style>
 </head>
 <body>
@@ -650,6 +831,7 @@
   </div>
 
   <div class="sidebar" id="sidebar">
+    <div class="sheet-handle" id="sheetHandle"></div>
     <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle panel">
       <svg width="10" height="14" viewBox="0 0 10 14" fill="none" xmlns="http://www.w3.org/2000/svg">
         <polyline points="7,1 2,7 7,13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -670,6 +852,8 @@
     <div class="log-panel" id="logPanel"></div>
   </div>
 </div>
+
+<button class="fab-run" id="fabRun" onclick="runFromHere()">RUN!</button>
 
 <script>
 // ─── REGION BOUNDING BOXES ──────────────────────────────────────────────────
@@ -862,7 +1046,9 @@ async function runScan() {
   const overlay = document.getElementById('scanOverlay');
   const sub = document.getElementById('scanSubLabel');
 
+  const fab = document.getElementById('fabRun');
   btn.disabled = true;
+  if (fab) fab.disabled = true;
   overlay.classList.add('active');
   markerLayer.clearLayers();
   document.getElementById('resultsList').innerHTML = '';
@@ -870,6 +1056,7 @@ async function runScan() {
   document.getElementById('logPanel').innerHTML = '';
   currentRegion = region;
   activeCardIndex = null;
+  if (window.innerWidth <= 640 && typeof setSheetState === 'function') setSheetState(0);
 
   // Fly to region (skip on initial load to keep Saranac Lake view)
   if (!isInitialScan) {
@@ -951,10 +1138,12 @@ async function runScan() {
   // 5. Render results
   overlay.classList.remove('active');
   btn.disabled = false;
+  if (fab) fab.disabled = false;
   document.getElementById('siteCount').textContent = top.length;
   document.getElementById('statusBar').innerHTML = `${region.name}<br><span class="live">● SCAN COMPLETE</span>`;
 
   renderResults(top);
+  if (window.innerWidth <= 640 && typeof setSheetState === 'function') setSheetState(1);
 }
 
 // ─── RENDER RESULTS ──────────────────────────────────────────────────────────
@@ -983,6 +1172,7 @@ function renderResults(sites) {
       card.classList.add('active');
       map.flyTo([site.pt.lat, site.pt.lng], 12, { animate: true, duration: 1.0 });
       activeCardIndex = i;
+      if (window.innerWidth <= 640 && typeof setSheetState === 'function') setSheetState(0);
     });
     list.appendChild(card);
 
@@ -1064,8 +1254,11 @@ function applyFilter() {
 // ─── RUN! 5-0 COMIN' — GEOLOCATION NEAREST BEST SPOT ────────────────────────
 async function runFromHere() {
   const btn = document.getElementById('runBtn');
+  const fab = document.getElementById('fabRun');
   btn.disabled = true;
   btn.textContent = 'LOCATING...';
+  if (fab) fab.disabled = true;
+  if (navigator.vibrate) navigator.vibrate(200);
   const statusBar = document.getElementById('statusBar');
   statusBar.innerHTML = `GPS LOCATE<br><span class="live">● ACQUIRING</span>`;
 
@@ -1123,6 +1316,7 @@ async function runFromHere() {
   } finally {
     btn.disabled = false;
     btn.textContent = "RUN! 5-0 COMIN'";
+    if (fab) fab.disabled = false;
   }
 }
 
@@ -1236,6 +1430,66 @@ map.on('moveend', () => {
     const checkbox = document.querySelector(`.poi-toggle[data-poi="${cat}"] input`);
     if (checkbox?.checked) togglePOI(cat).then(() => { checkbox.checked = true; });
   });
+});
+
+// ─── BOTTOM SHEET (MOBILE) ──────────────────────────────────────────────────
+// States: 0 = collapsed (just handle visible), 1 = peek (shows header + a few cards), 2 = open (full)
+var setSheetState; // global so runScan/renderResults can call it
+(function() {
+  if (window.innerWidth > 640) return; // skip on desktop
+
+  const sheet = document.getElementById('sidebar');
+  const handle = document.getElementById('sheetHandle');
+  let state = 0; // start collapsed
+
+  setSheetState = function(s) {
+    state = s;
+    sheet.classList.remove('sheet-peek', 'sheet-open', 'collapsed');
+    if (state === 1) sheet.classList.add('sheet-peek');
+    else if (state === 2) sheet.classList.add('sheet-open');
+  };
+
+  // Tap handle to cycle states
+  handle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setSheetState((state + 1) % 3);
+  });
+
+  // Swipe on handle
+  let startY = 0;
+  handle.addEventListener('touchstart', (e) => {
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+
+  handle.addEventListener('touchend', (e) => {
+    const dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dy) < 20) return; // too small, let click handle it
+    if (dy < -30) {
+      // Swipe up — open more
+      setSheetState(Math.min(state + 1, 2));
+    } else if (dy > 30) {
+      // Swipe down — collapse more
+      setSheetState(Math.max(state - 1, 0));
+    }
+  }, { passive: true });
+
+  // Also allow swiping on the sidebar header area
+  const header = sheet.querySelector('.sidebar-header');
+  if (header) {
+    header.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+    header.addEventListener('touchend', (e) => {
+      const dy = e.changedTouches[0].clientY - startY;
+      if (dy < -30) setSheetState(Math.min(state + 1, 2));
+      else if (dy > 30) setSheetState(Math.max(state - 1, 0));
+    }, { passive: true });
+  }
+})();
+
+// Re-initialize sheet handler on resize (e.g. orientation change)
+window.addEventListener('resize', () => {
+  if (window.innerWidth <= 640 && typeof setSheetState !== 'function') {
+    location.reload(); // simplest way to re-init on orientation change to mobile
+  }
 });
 </script>
 </body>
