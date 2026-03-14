@@ -126,6 +126,32 @@
   .run-btn:active { transform: scale(0.98); }
   .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  .tile-toggle-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+  }
+  .tile-toggle-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+
+  .mute-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 14px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: border-color 0.2s, opacity 0.2s;
+    line-height: 1;
+  }
+  .mute-btn:hover { border-color: var(--accent-dim); }
+  .mute-btn.muted { opacity: 0.4; }
+
   .status-bar {
     margin-left: auto;
     font-size: 10px;
@@ -157,8 +183,9 @@
     background: #0d110d;
   }
 
-  /* Dark map tiles via CSS filter */
-  .leaflet-tile { filter: brightness(0.5) saturate(0.3) hue-rotate(90deg); }
+  /* Dark map tiles via CSS filter — class-based for tile layer switching */
+  .tiles-osm { filter: brightness(0.5) saturate(0.3) hue-rotate(90deg); }
+  .tiles-sat { filter: brightness(0.45) saturate(0.5) contrast(1.1); }
 
   .sidebar {
     width: 280px;
@@ -605,6 +632,7 @@
     .header-controls {
       width: 100%;
       gap: 6px;
+      flex-wrap: wrap;
     }
     .region-select {
       flex: 1;
@@ -617,6 +645,18 @@
       font-size: 14px;
     }
     .run-btn { display: none; }
+    .tile-toggle-btn {
+      min-height: 44px;
+      font-size: 10px;
+      padding: 6px 8px;
+      letter-spacing: 1px;
+    }
+    .mute-btn {
+      min-height: 44px;
+      min-width: 44px;
+      padding: 6px;
+      font-size: 16px;
+    }
     .status-bar {
       width: 100%;
       text-align: center;
@@ -799,6 +839,8 @@
     </select>
     <button class="scan-btn" id="scanBtn" onclick="runScan()">SCAN REGION</button>
     <button class="run-btn" id="runBtn" onclick="runFromHere()">RUN! 5-0 COMIN'</button>
+    <button class="tile-toggle-btn" id="tileToggle" onclick="toggleTileMode()">MAP</button>
+    <button class="mute-btn" id="muteBtn" onclick="handleMuteToggle()" title="Toggle sound">🔊</button>
   </div>
   <div class="status-bar" id="statusBar">
     SELECT REGION<br>
@@ -886,15 +928,119 @@ const REGIONS = {
 
 // ─── MAP INIT ────────────────────────────────────────────────────────────────
 const map = L.map('map', { zoomControl: false }).setView([44.33, -74.13], 9);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OSM contributors', maxZoom: 18
-}).addTo(map);
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OSM contributors', maxZoom: 18, className: 'tiles-osm'
+});
+const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles &copy; Esri', maxZoom: 18, className: 'tiles-sat'
+});
+let currentTileMode = 'map';
+osmLayer.addTo(map);
 L.control.zoom({ position: 'topright' }).addTo(map);
+
+function toggleTileMode() {
+  if (currentTileMode === 'map') {
+    map.removeLayer(osmLayer);
+    satLayer.addTo(map);
+    currentTileMode = 'sat';
+  } else {
+    map.removeLayer(satLayer);
+    osmLayer.addTo(map);
+    currentTileMode = 'map';
+  }
+  document.getElementById('tileToggle').textContent = currentTileMode === 'map' ? 'MAP' : 'SAT';
+}
 
 let markerLayer = L.layerGroup().addTo(map);
 let activeCardIndex = null;
 let currentRegion = null;
 let lastScoredResults = []; // store full results for filtering
+
+// ─── SOUND EFFECTS (Web Audio API) ──────────────────────────────────────────
+const SoundFX = (() => {
+  let ctx = null;
+  let muted = false;
+
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function scanCrackle() {
+    if (muted) return;
+    const ac = getCtx();
+    const duration = 0.4;
+    const bufSize = ac.sampleRate * duration;
+    const buf = ac.createBuffer(1, bufSize, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+    const noise = ac.createBufferSource();
+    noise.buffer = buf;
+
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 2000;
+    filter.Q.value = 0.8;
+
+    const gain = ac.createGain();
+    const now = ac.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.3, now + 0.02);
+    gain.gain.linearRampToValueAtTime(0.15, now + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter).connect(gain).connect(ac.destination);
+    noise.start(now);
+    noise.stop(now + duration);
+
+    // Squelch tone
+    const squelch = ac.createOscillator();
+    squelch.frequency.value = 1200;
+    const sqGain = ac.createGain();
+    sqGain.gain.setValueAtTime(0.15, now);
+    sqGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    squelch.connect(sqGain).connect(ac.destination);
+    squelch.start(now);
+    squelch.stop(now + 0.08);
+  }
+
+  function sirenWail() {
+    if (muted) return;
+    const ac = getCtx();
+    const now = ac.currentTime;
+
+    function whoop(t) {
+      const osc = ac.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(400, t);
+      osc.frequency.exponentialRampToValueAtTime(1200, t + 0.15);
+      const gain = ac.createGain();
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.linearRampToValueAtTime(0.25, t + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      osc.connect(gain).connect(ac.destination);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    }
+
+    whoop(now);
+    whoop(now + 0.22);
+  }
+
+  function toggleMute() { muted = !muted; return muted; }
+  function isMuted() { return muted; }
+
+  return { scanCrackle, sirenWail, toggleMute, isMuted };
+})();
+
+function handleMuteToggle() {
+  const isMuted = SoundFX.toggleMute();
+  const btn = document.getElementById('muteBtn');
+  btn.textContent = isMuted ? '🔇' : '🔊';
+  btn.classList.toggle('muted', isMuted);
+}
 
 // Clicking the map background zooms back out to region overview
 map.on('click', () => {
@@ -1260,6 +1406,7 @@ async function runFromHere() {
   btn.textContent = 'LOCATING...';
   if (fab) fab.disabled = true;
   if (navigator.vibrate) navigator.vibrate(200);
+  SoundFX.sirenWail();
   const statusBar = document.getElementById('statusBar');
   statusBar.innerHTML = `GPS LOCATE<br><span class="live">● ACQUIRING</span>`;
 
