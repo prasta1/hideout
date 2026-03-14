@@ -7,7 +7,7 @@ A single-page web app that scans terrain in the Northeast US and scores location
 The app fetches real geographic data for a selected region, generates a grid of candidate points, scores each one for natural enclosure, and plots the top 10 on an interactive map.
 
 **Scoring factors (weighted composite out of 100):**
-- **Concavity (45%)** — blended score: terrain depth relative to neighbors (60%) + directional enclosure from 8 compass bearings (40%). Fetched from OpenTopoData (SRTM 30m elevation data).
+- **Concavity (45%)** — blended score: terrain depth relative to neighbors (60%) + directional enclosure from 8 compass bearings (40%). Fetched from Open-Meteo (Copernicus DEM 90m elevation data).
 - **Canopy coverage (35%)** — gradient forest density sampling (9 points in ~150m radius) checking overlap with forest/woodland polygons from OpenStreetMap via the Overpass API.
 - **Ruggedness (20%)** — elevation spread across the 8 neighbor points. High spread = broken terrain = harder to observe.
 
@@ -32,7 +32,7 @@ The app fetches real geographic data for a selected region, generates a grid of 
 ## Tech stack
 
 - **Leaflet.js** — map rendering and interaction (tiles from OpenStreetMap)
-- **OpenTopoData API** — free SRTM elevation data, no key required
+- **Open-Meteo Elevation API** — free Copernicus DEM elevation data, CORS-friendly, no key required
 - **Overpass API** — free OpenStreetMap query endpoint for forest polygons and POI data, no key required
 - Vanilla HTML/CSS/JS, single file, no build step
 
@@ -65,7 +65,8 @@ https://prasta1.github.io/hideout/
 ## UI features
 
 - Map starts centered on Saranac Lake, NY — scan manually when ready
-- Collapsible sidebar for full-screen map on mobile (chevron toggle tab)
+- **Mobile-responsive layout** — bottom sheet sidebar with swipe gestures, floating RUN! button, touch-optimized controls
+- Collapsible sidebar on desktop (chevron toggle tab)
 - Clicking a marker or sidebar card zooms to the location and highlights the card
 - Clicking the map background zooms back out to the full region overview
 - Score filter slider to set a minimum enclosure score threshold
@@ -87,7 +88,7 @@ GitHub Pages redeploys automatically within ~30 seconds.
 ## Known limitations
 
 - CORS blocks API calls when opened as a `file://` URL on mobile — use the local server or hosted URL
-- OpenTopoData has a rate limit; the app batches requests in chunks of 100 points with a 300ms delay between chunks
+- Open-Meteo has a rate limit; the app batches requests in chunks of 100 points with a 200ms delay between chunks
 - Overpass API can be slow or occasionally unavailable; the app falls back to terrain-only scoring if it fails
 - Candidate points are stratified-random, so results vary slightly between scans of the same region
 - Forest polygon detection uses a ray-casting point-in-polygon algorithm — accurate for convex polygons, may have edge cases on complex shapes
